@@ -11,12 +11,12 @@ This project is heavily inspired by and uses much of code from [SheetKeys](https
 ### Available Motions
 
 #### Basic Movement
-- `h` - Move cursor left
-- `j` - Move cursor down
-- `k` - Move cursor up
-- `l` - Move cursor right
-- `w` - Move to start of next word
-- `b` - Move to start of previous word
+- `h` - Move cursor left (supports count: `5h` moves 5 chars left)
+- `j` - Move cursor down (supports count: `5j` moves 5 lines down)
+- `k` - Move cursor up (supports count: `5k` moves 5 lines up)
+- `l` - Move cursor right (supports count: `5l` moves 5 chars right)
+- `w` - Move to start of next word (supports count)
+- `b` - Move to start of previous word (supports count)
 
 #### Line Navigation
 - `0` or `^` or `_` - Go to start of line
@@ -25,8 +25,8 @@ This project is heavily inspired by and uses much of code from [SheetKeys](https
 - `A` - Go to end of line and enter insert mode
 
 #### Document Navigation
-- `g` - Go to document start
-- `G` - Go to document end
+- `gg` - Go to document start (supports count: `5gg` goes to line 5)
+- `G` - Go to document end (supports count: `5G` goes to line 5)
 - `{` - Go to start of paragraph
 - `}` - Go to end of paragraph
 
@@ -44,13 +44,24 @@ This project is heavily inspired by and uses much of code from [SheetKeys](https
 - `d` + motion - Delete (supports `dw`, `diw`, `dp`, `dip`, `dd`)
 - `c` + motion - Change (supports `cw`, `ciw`, `cp`, `cip`, `cc`)
 - `y` + motion - Yank/copy (supports `yw`, `yiw`, `yp`, `yip`, `yy`)
-- `p` - Paste
-- `u` - Undo
-- `r` - Redo
+- `p` - Paste (supports count: `5p` pastes 5 times)
+- `u` - Undo (supports count: `5u` undoes 5 times)
+- `r` - Redo (supports count: `5r` redoes 5 times)
 
 #### Line Operations
-- `o` - Add new line below and enter insert mode
-- `O` - Add new line above and enter insert mode
+- `o` - Add new line below and enter insert mode (supports count)
+- `O` - Add new line above and enter insert mode (supports count)
+- `J` - Join current line with next line (supports count)
+
+### Marks and Jumps
+- `m{a-z}` - Set mark at current position
+- `'{a-z}` - Jump to mark (linewise - goes to start of line)
+- `` `{a-z}`` - Jump to mark (exact position)
+
+### Search
+- `/` - Open search (uses Google Docs Find)
+- `n` - Repeat search forward
+- `N` - Repeat search backward
 
 ### Visual Mode Commands
 When in visual mode (`v` or `V`):
@@ -82,7 +93,8 @@ Install from source
 
 ## Known Limitations
 
-- Most advanced Vim features like marks, macros, and registers are not supported
+- Marks are lost when the document tab is reloaded or the line that held the mark is deleted
+- Macros and registers are not supported
 - Custom key mappings are not supported
 - PR's are welcome to add these features
 

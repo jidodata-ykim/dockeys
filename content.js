@@ -9,12 +9,20 @@
 // before sending to layout engine and interpret them into respective vim motion/command.
 // Then implement those motions by sending relevant keystrokes. Essentially doing a keystroke to keystroke remapping. 
 
-const iframe = document.getElementsByTagName('iframe')[0]   // https://stackoverflow.com/a/4388829
-iframe.contentDocument.addEventListener('keydown', eventHandler, true)
+// Improved iframe detection using class selector
+const iframe = document.querySelector('.docs-texteventtarget-iframe')
+const editorDoc = iframe.contentDocument
+editorDoc.addEventListener('keydown', eventHandler, true)
 
 const cursorTop = document.getElementsByClassName("kix-cursor-top")[0] // element to edit to show normal vs insert mode
 let mode = 'normal'
 let tempnormal = false // State variable for indicating temperory normal mode
+
+// Generic pending command object for handling multi-key sequences
+const pending = { cmd: null, count: '', arg: null }
+
+// Marks storage - stores Range objects for each mark
+const marks = {}   // { a: Range, b: Range, ... }
 
 // How to simulate a keypress in Chrome: http://stackoverflow.com/a/10520017/46237
 // Note that we have to do this keypress simulation in an injected script, because events dispatched
@@ -27,6 +35,7 @@ const keyCodes = {
     backspace: 8,
     enter: 13,
     esc: 27,
+    " ": 32,
     end: 35,
     home: 36,
     left: 37,
@@ -34,7 +43,13 @@ const keyCodes = {
     right: 39,
     down: 40,
     "delete": 46,
+    f: 70,
 };
+
+// Add A-Z keycodes for completeness
+for (let i = 65; i <= 90; i++) {
+    keyCodes[String.fromCharCode(i).toLowerCase()] = i;
+}
 
 // Send request to injected page script to simulate keypress
 // Messages are passed to page script via "doc-keys-simulate-keypress" events, which are dispatched
@@ -58,7 +73,17 @@ modeIndicator.style.zIndex = '9999'
 document.body.appendChild(modeIndicator)
 
 function updateModeIndicator(currentMode) {
-    modeIndicator.textContent = currentMode.toUpperCase()
+    let displayText = currentMode.toUpperCase()
+    
+    // Show pending command info
+    if (pending.cmd) {
+        displayText = pending.count + pending.cmd
+    } else if (pending.count) {
+        displayText = 'NORMAL ' + pending.count
+    }
+    
+    modeIndicator.textContent = displayText
+    
     switch(currentMode) {
         case 'normal':
             modeIndicator.style.backgroundColor = '#1a73e8'
@@ -72,6 +97,10 @@ function updateModeIndicator(currentMode) {
         case 'visualLine':
             modeIndicator.style.backgroundColor = '#fbbc04'
             modeIndicator.style.color = 'black'
+            break
+        case 'search':
+            modeIndicator.style.backgroundColor = '#9c27b0'
+            modeIndicator.style.color = 'white'
             break
         case 'waitForFirstInput':
         case 'waitForSecondInput':
@@ -126,6 +155,93 @@ function switchModeToWait2() {
 
 let longStringOp = ""
 
+// Reset pending command state
+function resetPending() {
+    pending.cmd = null
+    pending.count = ''
+    pending.arg = null
+    updateModeIndicator(mode)
+}
+
+// Set a mark at current cursor position
+function setMark(letter) {
+    const sel = editorDoc.getSelection()
+    if (!sel.rangeCount) return
+    marks[letter] = sel.getRangeAt(0).cloneRange()
+}
+
+// Jump to a previously set mark
+function jumpToMark(letter, linewise = false) {
+    const r = marks[letter]
+    if (!r) return
+    const sel = editorDoc.getSelection()
+    sel.removeAllRanges()
+    sel.addRange(r.cloneRange())
+    if (linewise) {
+        // Go to start of the visual line to emulate Vim's ' behaviour
+        sendKeyEvent('home')
+    }
+}
+
+// Handle two-character commands
+function dispatchTwoCharCommand(cmd, arg) {
+    const count = Number(pending.count) || 1
+    switch (cmd) {
+        case 'm':                       // set mark
+            if (/[a-z]/i.test(arg)) setMark(arg)
+            break
+        case "'":                       // jump to mark (linewise)
+            if (/[a-z]/i.test(arg)) jumpToMark(arg, true)
+            break
+        case '`':                       // jump to mark (exact)
+            if (/[a-z]/i.test(arg)) jumpToMark(arg, false)
+            break
+        case 'g':
+            if (arg === 'g') {
+                // Apply count for gg command
+                if (count > 1) {
+                    sendKeyEvent("home", { control: true })
+                    for (let i = 1; i < count; i++) {
+                        sendKeyEvent("down")
+                    }
+                } else {
+                    sendKeyEvent("home", { control: true })
+                }
+            }
+            break
+        case 'd':
+            if (arg === 'd') {
+                goToStartOfLine()
+                selectToEndOfLine()
+                runLongStringOp('d')
+            } else {
+                longStringOp = 'd'
+                waitForFirstInput(arg)
+            }
+            break
+        case 'c':
+            if (arg === 'c') {
+                goToStartOfLine()
+                selectToEndOfLine()
+                runLongStringOp('c')
+            } else {
+                longStringOp = 'c'
+                waitForFirstInput(arg)
+            }
+            break
+        case 'y':
+            if (arg === 'y') {
+                goToStartOfLine()
+                selectToEndOfLine()
+                runLongStringOp('y')
+            } else {
+                longStringOp = 'y'
+                waitForFirstInput(arg)
+            }
+            break
+    }
+}
+
 
 function goToStartOfLine() {
     sendKeyEvent("home")
@@ -147,9 +263,8 @@ function goToStartOfWord() {
     sendKeyEvent("left", { shift: false, control: true })
 }
 
-function goToTop() {
-    sendKeyEvent("home", { control: true, shift: true })
-    longStringOp = ""
+function goToStartOfDoc() {
+    sendKeyEvent("home", { control: true })
 }
 
 function selectToEndOfPara() {
@@ -198,9 +313,6 @@ function runLongStringOp(operation = longStringOp) {
             switchModeToNormal()
             break
         case "v":
-            break
-        case "g":
-            goToTop()
             break
     }
 }
@@ -275,6 +387,16 @@ function eventHandler(e) {
         tempnormal = true
         return;
     }
+    
+    // Handle search mode
+    if (mode === 'search') {
+        if (e.key === 'Escape' || e.key === 'Enter') {
+            e.preventDefault()
+            switchModeToNormal()
+        }
+        return; // let Docs handle all other keystrokes in search mode
+    }
+    
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     if (e.key == 'Escape') {
         e.preventDefault()
@@ -282,6 +404,7 @@ function eventHandler(e) {
             sendKeyEvent("right")
         }
         switchModeToNormal()
+        resetPending()
         return;
     }
     if (mode != 'insert') {
@@ -308,45 +431,88 @@ function eventHandler(e) {
 }
 
 function handleKeyEventNormal(key) {
+    // Handle numeric repeat counts
+    if (/[0-9]/.test(key) && !(pending.count === '' && key === '0')) {
+        pending.count += key
+        updateModeIndicator(mode)
+        return
+    }
+    
+    // Handle second keystroke of two-char commands
+    if (pending.cmd) {
+        dispatchTwoCharCommand(pending.cmd, key)
+        resetPending()
+        return
+    }
+    
+    const count = Number(pending.count) || 1
+    
     switch (key) {
+        // Two-character command starters
+        case 'm':
+        case "'":
+        case '`':
+        case 'g':
+        case 'd':
+        case 'y':
+        case 'c':
+            pending.cmd = key
+            updateModeIndicator(mode)
+            return
+            
+        // Search
+        case '/':
+            sendKeyEvent('f', { control: true }) // open Find
+            mode = 'search'
+            updateModeIndicator('search')
+            resetPending()
+            return
+            
+        case 'n':
+            sendKeyEvent('enter')              // repeat forward
+            break
+        case 'N':
+            sendKeyEvent('enter', { shift: true }) // repeat backward
+            break
+            
+        // Movement with repeat support
         case "h":
-            sendKeyEvent("left")
+            for (let i = 0; i < count; i++) sendKeyEvent("left")
             break
         case "j":
-            sendKeyEvent("down")
+            for (let i = 0; i < count; i++) sendKeyEvent("down")
             break
         case "k":
-            sendKeyEvent("up")
+            for (let i = 0; i < count; i++) sendKeyEvent("up")
             break
         case "l":
-            sendKeyEvent("right")
+            for (let i = 0; i < count; i++) sendKeyEvent("right")
             break
         case "}":
-            goToEndOfPara()
+            for (let i = 0; i < count; i++) goToEndOfPara()
             break
         case "{":
-            goToStartOfPara()
+            for (let i = 0; i < count; i++) goToStartOfPara()
             break
         case "b":
-            sendKeyEvent("left", { control: true })
+            for (let i = 0; i < count; i++) sendKeyEvent("left", { control: true })
             break
         case "w":
-            sendKeyEvent("right", { control: true })
-            break
-        case "g":
-            sendKeyEvent("home", { control: true })
+            for (let i = 0; i < count; i++) sendKeyEvent("right", { control: true })
             break
         case "G":
-            sendKeyEvent("end", { control: true })
-            break
-        case "c":
-        case "d":
-        case "y":
-            longStringOp = key
-            mode = "waitForFirstInput"
+            if (pending.count) {
+                // Go to specific line number
+                sendKeyEvent("home", { control: true })
+                for (let i = 1; i < count; i++) {
+                    sendKeyEvent("down")
+                }
+            } else {
+                sendKeyEvent("end", { control: true })
+            }
             break
         case "p":
-            clickMenu(menuItems.paste)
+            for (let i = 0; i < count; i++) clickMenu(menuItems.paste)
             break
         case "a":
             sendKeyEvent("right")
@@ -378,26 +544,42 @@ function handleKeyEventNormal(key) {
             switchModeToVisualLine()
             break
         case "o":
-            addLineBottom()
+            for (let i = 0; i < count; i++) addLineBottom()
             break
         case "O":
-            addLineTop()
+            for (let i = 0; i < count; i++) addLineTop()
             break
         case "u":
-            clickMenu(menuItems.undo)
+            for (let i = 0; i < count; i++) clickMenu(menuItems.undo)
             break
         case "r":
-            clickMenu(menuItems.redo)
+            for (let i = 0; i < count; i++) clickMenu(menuItems.redo)
+            break
+        case "J":
+            // Join lines - go to end of current line, delete newline, add space
+            for (let i = 0; i < count; i++) {
+                goToEndOfLine()
+                sendKeyEvent("delete")
+                // Add space unless there's already one
+                sendKeyEvent("right")
+                sendKeyEvent("left")
+                // This is a simplified version - in real Vim it's more complex
+                sendKeyEvent(" ")
+            }
             break
         default:
+            resetPending()
             return;
     }
+    
+    resetPending()
+    
     // Check if operation is occuring in temperory normal mode after ctrl-o
     if (tempnormal) {
         tempnormal = false
         if (mode != 'visual' && mode != 'visualLine'){  // Switch back to insert 
             switchModeToInsert()                        // after operation
-            }
+        }
     }
 }
 
