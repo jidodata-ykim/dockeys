@@ -44,9 +44,13 @@ This project is heavily inspired by and uses much of code from [SheetKeys](https
 - `d` + motion - Delete (supports `dw`, `diw`, `dp`, `dip`, `dd`)
 - `c` + motion - Change (supports `cw`, `ciw`, `cp`, `cip`, `cc`)
 - `y` + motion - Yank/copy (supports `yw`, `yiw`, `yp`, `yip`, `yy`)
+- `x` - Delete character under cursor (supports count: `5x` deletes 5 chars)
+- `X` - Delete character before cursor (supports count)
+- `D` - Delete from cursor to end of line
+- `r{char}` - Replace character under cursor with {char} (supports count)
 - `p` - Paste (supports count: `5p` pastes 5 times)
 - `u` - Undo (supports count: `5u` undoes 5 times)
-- `r` - Redo (supports count: `5r` redoes 5 times)
+- `R` - Redo (supports count: `5R` redoes 5 times)
 
 #### Line Operations
 - `o` - Add new line below and enter insert mode (supports count)

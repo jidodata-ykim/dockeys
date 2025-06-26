@@ -196,6 +196,18 @@ function dispatchTwoCharCommand(cmd, arg) {
         case '`':                       // jump to mark (exact)
             if (/[a-z]/i.test(arg)) jumpToMark(arg, false)
             break
+        case 'r':                       // replace character
+            // Delete current character and insert the new one
+            for (let i = 0; i < count; i++) {
+                sendKeyEvent("delete")
+                // Send the character to replace with
+                const keyCode = arg.charCodeAt(0)
+                window.dispatchEvent(new CustomEvent("doc-keys-simulate-keypress", { 
+                    detail: { keyCode, mods: {} } 
+                }))
+                if (i < count - 1) sendKeyEvent("left") // Move back for multiple replacements
+            }
+            break
         case 'g':
             if (arg === 'g') {
                 // Apply count for gg command
@@ -456,6 +468,7 @@ function handleKeyEventNormal(key) {
         case 'd':
         case 'y':
         case 'c':
+        case 'r':  // Replace character
             pending.cmd = key
             updateModeIndicator(mode)
             return
@@ -552,8 +565,18 @@ function handleKeyEventNormal(key) {
         case "u":
             for (let i = 0; i < count; i++) clickMenu(menuItems.undo)
             break
-        case "r":
+        case "R":  // Capital R for redo (since r is now replace)
             for (let i = 0; i < count; i++) clickMenu(menuItems.redo)
+            break
+        case "x":  // Delete character under cursor
+            for (let i = 0; i < count; i++) sendKeyEvent("delete")
+            break
+        case "X":  // Delete character before cursor
+            for (let i = 0; i < count; i++) sendKeyEvent("backspace")
+            break
+        case "D":  // Delete to end of line
+            selectToEndOfLine()
+            sendKeyEvent("delete")
             break
         case "J":
             // Join lines - go to end of current line, delete newline, add space

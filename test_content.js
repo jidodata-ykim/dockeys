@@ -15,6 +15,11 @@ const testSuite = {
             { input: ['g', 'g'], expected: "Should go to document start" },
             { input: ['5', 'g', 'g'], expected: "Should go to line 5" },
             { input: ['2', '0', 'G'], expected: "Should go to line 20" },
+            { input: ['5', 'x'], expected: "Should delete 5 characters" },
+            { input: ['r', 'a'], expected: "Should replace character with 'a'" },
+            { input: ['3', 'r', 'x'], expected: "Should replace 3 characters with 'x'" },
+            { input: ['D'], expected: "Should delete to end of line" },
+            { input: ['X'], expected: "Should delete character before cursor" },
         ];
         
         tests.forEach(test => {
@@ -99,30 +104,45 @@ Manual Test Scenarios for DocsKeys:
    - Type "2dd" → Should delete 2 lines
    - Type "4u" → Should undo 4 times
 
-2. Marks:
+2. Character Operations:
+   - Type "x" → Delete character under cursor
+   - Type "5x" → Delete 5 characters forward
+   - Type "X" → Delete character before cursor
+   - Type "3X" → Delete 3 characters backward
+   - Type "ra" → Replace character under cursor with 'a'
+   - Type "3rx" → Replace next 3 characters with 'x'
+   - Type "D" → Delete from cursor to end of line
+
+3. Marks:
    - Position cursor, type "ma" → Set mark 'a'
    - Move elsewhere, type "'a" → Jump to line with mark 'a'
    - Type "\`a" → Jump to exact position of mark 'a'
    - Edit document, marks should persist
 
-3. Search:
+4. Search:
    - Type "/" → Google Docs Find bar should open
    - Search for text, press Enter → Should exit search mode
    - Type "n" → Should find next occurrence
    - Type "N" → Should find previous occurrence
 
-4. Two-character Commands:
+5. Two-character Commands:
    - Type "gg" → Go to document start
    - Type "5gg" → Go to line 5
    - Type "diw" → Delete inner word
    - Type "ciw" → Change inner word
    - Type "yiw" → Yank inner word
 
-5. Visual Mode with Counts:
+6. Visual Mode with Counts:
    - Type "v5l" → Select 5 characters to the right
    - Type "V3j" → Select 3 lines down in visual line mode
 
-6. Edge Cases:
+7. Undo/Redo:
+   - Type "u" → Undo last change
+   - Type "3u" → Undo last 3 changes
+   - Type "R" → Redo (note: capital R)
+   - Type "2R" → Redo 2 changes
+
+8. Edge Cases:
    - Type "0" at start of line → Should not enter repeat count
    - Type "100j" → Should handle large counts gracefully
    - Set marks, reload page → Marks should be lost (known limitation)
